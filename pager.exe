@@ -19,7 +19,7 @@ typedef unsigned long int uint32_t;
 #define PAGER_DIS_CTRL_PAGE_DOWN    (0x02)
 
 
-static uint8_t RecvBuff[RECV_BUF_SIZE] = {0};
+static uint8_t RecvBuff[RBUF_SIZE] = {0};
 static uint32_t HeadIndex = 0;
 static uint32_t TailIndex = 0;
 static uint32_t DisIndex = 0;
@@ -29,7 +29,7 @@ void PAGER_DisplayCurrentList(void)
 {
     uint8_t i = 0;
     uint8_t TempDevBuff[MAX_DIS_NUMBER] = {0};
-    uint8_t DisplayDevNumber = 0;
+    uint32_t DisplayDevNumber = 0;
 
     //Get Current Display Devices Number
     DisplayDevNumber = TailIndex - DisIndex;
@@ -41,7 +41,7 @@ void PAGER_DisplayCurrentList(void)
         TempDevBuff[i] = RecvBuff[(DisIndex+i)&RBUF_MASK];
     }
 
-    printf("DEV: %.2d %.2d %.2d %.2d %.2d", 
+    printf("DEV: %.2d %.2d %.2d %.2d %.2d\r\n", 
                             TempDevBuff[0],
                             TempDevBuff[1], 
                             TempDevBuff[2], 
@@ -53,7 +53,7 @@ void PAGER_DisplayCurrentList(void)
 //Display Control 
 void PAGER_DisplayCtrl(uint8_t Code)
 {
-    switch (code)
+    switch (Code)
     {
         //Page up
         case PAGER_DIS_CTRL_PAGE_UP:
@@ -103,9 +103,11 @@ void PAGER_FreeHeadFromSlaveDevList(void)
 
 }
 
+//Display Page Return Head
+void PAGER_ReturnHead(void)
+{
+    DisIndex = HeadIndex;
+    PAGER_DisplayCurrentList();
 
-
-
-
-
+}
 
