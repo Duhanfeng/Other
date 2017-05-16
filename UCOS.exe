@@ -1,0 +1,135 @@
+
+
+/*----------------------------------------------------------------------------
+    移植要点
+ *----------------------------------------------------------------------------*/
+1. 屏蔽钩子函数(将OS_APP_HOOKS_EN设为0)或者是自行将其实现
+2. 在滴答中断中调用OS_CPU_SysTickHandler(函数自带关中断操作)或者是OSTimeTick(需要在调用此函数的前后自行调用开关中断操作)
+3. 将启动文件中的PendSV_Handler改成OS_CPU_PendSVHandler,切忌二次调用(例如在自带的PendSV_Handler中再调用OS_CPU_PendSVHandler),因为第二次调用时SP和一些寄存器的内容已经被改变,导致系统调度失败,从而卡死在B OSStartHang 之中
+
+
+/*----------------------------------------------------------------------------
+    任务管理
+ *----------------------------------------------------------------------------*/
+
+创建任务:
+1. 定义任务优先级          #define TASK_PRIO     (25) 
+2. 定义任务栈栈长          #define TASK_STK_LEN  (64) 
+3. 定义任务栈数组          OS_STK task_stk[TASK_STK_LEN] = {0}; 
+4. 实现ucos任务调度函数    void ucos_task(void *p_arg);
+5. 创建任务  OSTaskCreate(ucos_task,(void *)0,&task_stk[TASK_STK_LEN-1],TASK_PRIO);
+
+注: 
+(1) 任务优先级分为0~62,数值越小,优先级越高; 
+(2) 任务栈是用于存储当前栈区的数据以保护现场.如果任务栈要保存float数据,则必须 
+    8个字节对齐; 
+(3) OSTaskCreate的第三个入参ptos,若栈是下生长则入参其任务栈的末尾地址;如果是
+    上生长则入参其任务栈的首地址.其栈的上下生长由宏OS_STK_GROWTH的值实现.
+
+挂起任务:
+OSTaskSuspend(INT8U prio)
+INT8U prio: 要挂起的任务的优先级,如果要挂起自身,调用宏OS_PRIO_SELF
+
+恢复任务:
+OSTaskResume(INT8U prio)
+INT8U prio: 要解挂的任务的优先级
+
+
+/*----------------------------------------------------------------------------
+    互斥条件
+ *----------------------------------------------------------------------------*/
+
+ 
+当访问公共资源的时候,应避免任务的竞争以及对数据的破坏.
+一般的方法有:
+
+1. 开关中断(临界区)
+OS_ENTER_CRITICAL();
+OS_EXIT_CRITICAL();
+
+2. 上锁(禁止任务切换)
+OSSchedLock();
+OSSchedUnlock();
+
+3. 信号量
+OSSemPend(SharedDataSem, 0, &err);
+OSSemPost(SharedDataSem);
+
+
+开关中断:
+关中断的时间不能过长,多用于处理内部变量以及数据结构.
+
+上锁:
+上锁会禁止了任务的切换,但是不关闭中断.所以要求当前的任务不与中断共享变量或数据结构.
+
+信号量用于：
+(1) 控制共享资源的使用权(满足互斥条件)
+(2) 标志某事件的发生
+(3) 使两个任务的行为同步
+值得注意的话,请求和释放信号量需要一定的时间,在处理简单的共享变量时并不建议这种方式(开关中断效率更高).
+信号量适用于处理时间比较长的共享资源,例如串口打印,I2C传输,不带DSP的浮点数运算等.
+在等待信号量时,任务处于挂起状态.
+
+
+/*----------------------------------------------------------------------------
+    任务间的通讯
+ *----------------------------------------------------------------------------*/
+
+1. 消息邮箱
+具有信号传递的功能,可以把一个任务里面的局部变量传递给另一个任务使用
+
+  1.1 创建邮箱
+  OS_EVENT  *OSMboxCreate (void *pmsg);
+  void *pmsg: 创建时要不要给信息给邮箱,不给则写(void *)0
+  OS_EVENT *: 事件块地址(邮箱地址)
+  
+  1.2 删除邮箱
+  OS_EVENT  *OSMboxDel (OS_EVENT *pevent, INT8U opt, INT8U *perr);
+  
+  
+  1.3 发送邮箱
+  INT8U  OSMboxPost (OS_EVENT *pevent, void *pmsg);
+  OS_EVENT *pevent: 邮箱地址
+  void *pmsg      : 要发送的消息的地址
+  
+  1.4 接收邮箱(阻塞)
+  void  *OSMboxPend (OS_EVENT *pevent, INT16U timeout, INT8U *perr);
+  OS_EVENT *pevent: 邮箱地址
+  INT16U timeout  : 超时时间
+  INT8U *perr     : 错误码
+  void  *         : 接收到的消息的地址
+  
+  1.5 接收邮箱(非阻塞)
+  void  *OSMboxAccept (OS_EVENT *pevent);
+  OS_EVENT *pevent: 邮箱地址
+  void  *         : 接收到的消息的地址
+  
+  
+2. 消息队列
+实际上是邮箱的阵列,以解决单个邮箱只能传输单个数据的问题.
+
+  2.1 创建队列
+  OS_EVENT *OSQCreate( void **start, INT8U size);
+  void **start: 存放消息地址的地址(可以考虑成一个指针数组 void * msg[size]的地址)
+  INT8U size  : 队列存放消息的条数
+  OS_EVENT *  : 事件块地址(队列地址)
+  
+  2.2 向队列发送信息
+  INT8U OSQPost(OS_EVENT *pevent, void *msg);
+  
+  2.3 读取队列信息
+  void *OSQPend( OS_EVENT *pevent, INT16U timeout, INT8U *err);
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
